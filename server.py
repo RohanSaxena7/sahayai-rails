@@ -142,7 +142,7 @@ def send_whatsapp_update(to_number: str, message: str) -> dict:
     """Sends real-time travel alerts, homestay confirmations, or escrow receipts to travelers via WhatsApp."""
     account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
     auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-    from_number = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+    from_number = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+17372508034")
 
     cleaned_number = to_number.strip().replace(" ", "").replace("-", "")
     if not cleaned_number.startswith("+"):
