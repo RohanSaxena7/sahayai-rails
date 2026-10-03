@@ -1,5 +1,6 @@
 import os
 import requests
+from twilio.rest import Client
 from fastmcp import FastMCP
 
 # Initialize FastMCP Server
@@ -135,6 +136,39 @@ def delhivery_sentinel_reroute(trip_id: str, incident_type: str, remaining_stops
         "delay_avoided_mins": 35,
         "updated_stop_sequence": list(reversed(remaining_stops))
     }
+
+@mcp.tool()
+def send_whatsapp_update(to_number: str, message: str) -> dict:
+    """Sends real-time travel alerts, homestay confirmations, or escrow receipts to travelers via WhatsApp."""
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+
+    cleaned_number = to_number.strip().replace(" ", "").replace("-", "")
+    if not cleaned_number.startswith("+"):
+        cleaned_number = f"+{cleaned_number}"
+    if not cleaned_number.startswith("whatsapp:"):
+        formatted_to = f"whatsapp:{cleaned_number}"
+    else:
+        formatted_to = cleaned_number
+
+    try:
+        client = Client(account_sid, auth_token)
+        msg = client.messages.create(
+            from_=from_number,
+            to=formatted_to,
+            body=message
+        )
+        return {
+            "status": "sent",
+            "message_sid": msg.sid,
+            "recipient": formatted_to
+        }
+    except Exception as e:
+        return {
+            "status": "failed",
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
