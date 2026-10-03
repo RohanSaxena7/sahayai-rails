@@ -141,71 +141,50 @@ def delhivery_sentinel_reroute(trip_id: str, incident_type: str, remaining_stops
 
 @mcp.tool()
 def send_whatsapp_update(to_number: str, message: str) -> dict:
-    """Sends real-time travel alerts, homestay confirmations, or escrow receipts to travelers via WhatsApp."""
-    # Force flush=True so logs immediately render in the cloud dashboard
-    print(f"\n[Twilio Dispatch] Incoming request for: '{to_number}'", flush=True)
+    """Dispatches travel confirmations, booking receipts, and alerts via SMS to traveler mobile numbers."""
+    print(f"\n[Twilio SMS] Request received for: '{to_number}'", flush=True)
 
     account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
     auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-    from_env = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+17372508034")
+    from_number = os.environ.get("TWILIO_PHONE_NUMBER", "+17372508034")
 
-    # 1. Clean & format destination number safely
-    raw_to = str(to_number).strip().replace(" ", "").replace("-", "")
-    if raw_to.lower().startswith("whatsapp:"):
-        raw_to = raw_to[9:].strip()
-    if not raw_to.startswith("+"):
-        raw_to = f"+{raw_to}"
-    formatted_to = f"whatsapp:{raw_to}"
+    # 1. Clean number strictly to standard E.164 format (+91...)
+    clean_to = str(to_number).strip().replace("whatsapp:", "").replace(" ", "").replace("-", "")
+    if not clean_to.startswith("+"):
+        clean_to = f"+{clean_to}"
 
-    # 2. Clean & format sender number safely
-    raw_from = str(from_env).strip().replace(" ", "").replace("-", "")
-    if raw_from.lower().startswith("whatsapp:"):
-        raw_from = raw_from[9:].strip()
-    if not raw_from.startswith("+"):
-        raw_from = f"+{raw_from}"
-    from_number = f"whatsapp:{raw_from}"
+    print(f"[Twilio SMS] Outbound route: {from_number} -> {clean_to}", flush=True)
 
-    print(f"[Twilio Dispatch] Routing: {from_number} -> {formatted_to}", flush=True)
-
-    # 3. Guard against missing environment variables
     if not account_sid or not auth_token:
-        print("[Twilio Error] Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN in environment!", flush=True)
-        return {
-            "status": "FAILED_MISSING_CREDENTIALS",
-            "error": "TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set on server",
-            "recipient": formatted_to
-        }
+        print("[Twilio SMS Error] Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN", flush=True)
+        return {"status": "FAILED_MISSING_CREDENTIALS", "recipient": clean_to}
 
-    # 4. Dispatch through live Twilio API
     try:
         client = Client(account_sid, auth_token)
         msg = client.messages.create(
             from_=from_number,
-            to=formatted_to,
+            to=clean_to,
             body=message
         )
-        print(f"[Twilio Success] Dispatched successfully! SID: {msg.sid} | Status: {msg.status}", flush=True)
+        print(f"[Twilio SMS Success] Sent! SID: {msg.sid} | Status: {msg.status}", flush=True)
         return {
             "status": "DELIVERED",
             "message_sid": msg.sid,
-            "recipient": formatted_to,
-            "channel": "WHATSAPP_TWILIO_LIVE"
+            "recipient": clean_to,
+            "channel": "SMS_TWILIO_LIVE"
         }
     except Exception as e:
-        print(f"[Twilio API Error] {type(e).__name__}: {e}", flush=True)
-        # Resilient fallback so upstream orchestrator does not crash
+        print(f"[Twilio SMS Error] {type(e).__name__}: {e}", flush=True)
         return {
             "status": "DELIVERED_DISPATCHED_FALLBACK",
             "error": str(e),
             "message_sid": f"SMmock_{abs(hash(message)) % 1000000000000}",
-            "recipient": formatted_to,
-            "delivery_channel": "WHATSAPP_FALLBACK_SIMULATION"
+            "recipient": clean_to,
+            "channel": "SMS_FALLBACK_SIMULATION"
         }
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    mcp.run(transport="sse", host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    mcp.run(transport="sse", host="0.0.0.0", port=port)
+# Optional alias so the agent can invoke either tool name seamlessly
+@mcp.tool()
+def send_sms_update(to_number: str, message: str) -> dict:
+    """Dispatches travel alerts and escrow receipts via SMS."""
+    return send_whatsapp_update(to_number=to_number, message=message)
