@@ -5,6 +5,17 @@ from fastmcp import FastMCP
 # Initialize FastMCP Server
 mcp = FastMCP("SahayAI Rails & Bridge")
 
+from starlette.responses import JSONResponse
+
+# Health check endpoints for AgenticOrg and Render
+@mcp.custom_route("/", methods=["GET", "HEAD"])
+async def root_health(request):
+    return JSONResponse({"status": "healthy", "service": "sahayai-rails"})
+
+@mcp.custom_route("/health", methods=["GET", "HEAD"])
+async def health_check_endpoint(request):
+    return JSONResponse({"status": "healthy", "service": "sahayai-rails"})
+
 # Retrieve the API key from environment variables or provide your fallback key
 GNANI_API_KEY = os.getenv("GNANI_API_KEY", "YOUR_ACTUAL_GNANI_API_KEY_HERE")
 
