@@ -57,26 +57,27 @@ def gnani_speech_to_text(audio_source_url: str, language_code: str = "hi-IN") ->
 # 2. GROUP CONSENSUS (Google Form Voting Tool)
 # =====================================================================
 
+DEFAULT_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdfeCSrvGfiELU0TXwhcQQny_ZeoTOMsYQBkQ75QOWcQ2iD-g/viewform"
+
 @mcp.tool()
-def create_group_voting_poll(trip_id: str, candidate_options: list[str], custom_form_url: str = "") -> dict:
+def create_group_voting_poll(trip_id: str, candidate_options: list[str], custom_form_url: str = DEFAULT_FORM_URL) -> dict:
     """Generates and publishes a Google Form voting link for group consensus directly into the chat session."""
-    form_link = custom_form_url if custom_form_url else f"https://docs.google.com/forms/d/e/1FAIpQLSc-sahayai-poll-{abs(hash(trip_id)) % 10000}/viewform"
+    form_link = custom_form_url if custom_form_url else DEFAULT_FORM_URL
     
-    poll_payload = {
+    poll_card = (
+        f"🗳️ **SahayAI Group Consensus Poll**\n"
+        f"Please vote for your preferred stay:\n" +
+        "\n".join([f"• Option {i+1}: {opt}" for i, opt in enumerate(candidate_options)]) +
+        f"\n\n👉 **Cast your vote here:** [SahayAI Google Form Consensus]({form_link})"
+    )
+    
+    return {
         "status": "POLL_PUBLISHED",
         "trip_id": trip_id,
         "voting_link": form_link,
         "options_to_vote": candidate_options,
-        "instructions": "All group members must submit their choice via the Google Form. Escrow locks once majority quorum is reached.",
-        "in_chat_display": (
-            f"🗳️ **SahayAI Group Vote Initiated**\n"
-            f"Please vote for your preferred itinerary:\n"
-            + "\n".join([f"• Option {i+1}: {opt}" for i, opt in enumerate(candidate_options)]) + "\n"
-            f"👉 [Click here to submit your vote via Google Form]({form_link})"
-        )
+        "in_chat_display": poll_card
     }
-    print(f"\n[Group Poll Created] Trip {trip_id}: {form_link}", flush=True)
-    return poll_payload
 
 # =====================================================================
 # 3. DELHIVERY LOCATION INTELLIGENCE & TELEMETRY
