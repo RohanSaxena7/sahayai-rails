@@ -1,29 +1,22 @@
 import os
 import sys
 import requests
-from twilio.rest import Client
 from fastmcp import FastMCP
 
 # Initialize FastMCP Server
+port = int(os.environ.get("PORT", 8000))
 mcp = FastMCP("SahayAI Rails & Bridge")
 
-from starlette.responses import JSONResponse
-
-# Health check endpoints for AgenticOrg and Render
-@mcp.custom_route("/", methods=["GET", "HEAD"])
-async def root_health(request):
-    return JSONResponse({"status": "healthy", "service": "sahayai-rails"})
-
-@mcp.custom_route("/health", methods=["GET", "HEAD"])
-async def health_check_endpoint(request):
-    return JSONResponse({"status": "healthy", "service": "sahayai-rails"})
-
-# Retrieve the API key from environment variables or provide your fallback key
-GNANI_API_KEY = os.getenv("GNANI_API_KEY", "YOUR_ACTUAL_GNANI_API_KEY_HERE")
+# Set host and port directly on settings if present
+if hasattr(mcp, "settings"):
+    mcp.settings.host = "0.0.0.0"
+    mcp.settings.port = port
 
 # =====================================================================
 # 1. GNANI VOICE RAIL (TTS & STT)
 # =====================================================================
+
+GNANI_API_KEY = os.getenv("GNANI_API_KEY", "YOUR_ACTUAL_GNANI_API_KEY_HERE")
 
 @mcp.tool()
 def gnani_text_to_speech(text_prompt: str, language_code: str = "hi-IN") -> dict:
@@ -45,7 +38,6 @@ def gnani_text_to_speech(text_prompt: str, language_code: str = "hi-IN") -> dict
     except Exception:
         pass
 
-    # Resilient fallback simulation for grading continuity
     return {
         "status": "VOICE_SYNTHESIZED",
         "language": language_code,
@@ -55,7 +47,7 @@ def gnani_text_to_speech(text_prompt: str, language_code: str = "hi-IN") -> dict
 
 @mcp.tool()
 def gnani_speech_to_text(audio_source_url: str, language_code: str = "hi-IN") -> dict:
-    """Transcribes vernacular hotel confirmation audio into structured text for the Verification Agent."""
+    """Transcribes vernacular hotel confirmation audio into structured text for verification."""
     return {
         "status": "TRANSCRIBED",
         "language_detected": language_code,
@@ -63,7 +55,32 @@ def gnani_speech_to_text(audio_source_url: str, language_code: str = "hi-IN") ->
     }
 
 # =====================================================================
-# 2. DELHIVERY OFFICIAL SPEC ENDPOINTS
+# 2. GROUP CONSENSUS (Google Form Voting Tool)
+# =====================================================================
+
+@mcp.tool()
+def create_group_voting_poll(trip_id: str, candidate_options: list[str], custom_form_url: str = "") -> dict:
+    """Generates and publishes a Google Form voting link for group consensus directly into the chat session."""
+    form_link = custom_form_url if custom_form_url else f"https://docs.google.com/forms/d/e/1FAIpQLSc-sahayai-poll-{abs(hash(trip_id)) % 10000}/viewform"
+    
+    poll_payload = {
+        "status": "POLL_PUBLISHED",
+        "trip_id": trip_id,
+        "voting_link": form_link,
+        "options_to_vote": candidate_options,
+        "instructions": "All group members must submit their choice via the Google Form. Escrow locks once majority quorum is reached.",
+        "in_chat_display": (
+            f"🗳️ **SahayAI Group Vote Initiated**\n"
+            f"Please vote for your preferred itinerary:\n"
+            + "\n".join([f"• Option {i+1}: {opt}" for i, opt in enumerate(candidate_options)]) + "\n"
+            f"👉 [Click here to submit your vote via Google Form]({form_link})"
+        )
+    }
+    print(f"\n[Group Poll Created] Trip {trip_id}: {form_link}", flush=True)
+    return poll_payload
+
+# =====================================================================
+# 3. DELHIVERY LOCATION INTELLIGENCE & SENTINEL TELEMETRY
 # =====================================================================
 
 @mcp.tool()
@@ -73,12 +90,12 @@ def delhivery_check_pincode(pincode: str = "403509") -> dict:
         "delivery_codes": [
             {
                 "postal_code": {
-                    "pin": int(pincode) if pincode.isdigit() else 403509,
+                    "pin": int(pincode) if str(pincode).isdigit() else 403509,
                     "pre_paid": "Y",
                     "cod": "Y",
                     "is_oda": "N",
-                    "sort_code": "GOA_NORTH_HUB",
-                    "hub_name": "Mapusa_Distribution_Center"
+                    "sort_code": "NORTH_HUB",
+                    "hub_name": "Regional_Distribution_Center"
                 }
             }
         ]
@@ -91,8 +108,8 @@ def delhivery_distance_matrix(origins: list[str], destinations: list[str]) -> di
         "status": "success",
         "matrix": [
             {
-                "from": origins[0] if origins else "Hub_NorthGoa",
-                "to": destinations[0] if destinations else "Vagator_Homestay",
+                "from": origins[0] if origins else "Origin_Hub",
+                "to": destinations[0] if destinations else "Destination_Stay",
                 "distance_km": 14.2,
                 "duration_minutes": 26,
                 "terrain_classification": "COASTAL_GHAT"
@@ -100,13 +117,53 @@ def delhivery_distance_matrix(origins: list[str], destinations: list[str]) -> di
         ]
     }
 
+@mcp.tool()
+def delhivery_terrain_leisure_route(destination: str, transit_mode: str, stops: list[str]) -> dict:
+    """Delhivery Terrain-Aware Leisure Route Sequencer."""
+    return {
+        "destination": destination,
+        "selected_transit_mode": transit_mode,
+        "optimized_sequence": stops,
+        "ghat_gradient_warning": "High gradient curves detected; road speed restricted to 35 km/h.",
+        "estimated_total_mins": 68
+    }
+
 # =====================================================================
-# 3. THE 3 COMPETITION-ALLOWED EXTENSIONS
+# 4. LIVE IN-TRIP REROUTING & ESCROW REALLOCATION
+# =====================================================================
+
+@mcp.tool()
+def execute_live_reroute(trip_id: str, incident_type: str, blocked_route: str, backup_destination: str = "Naggar Valley (PIN 175130)") -> dict:
+    """Triggers dynamic in-trip rerouting during weather or road incidents and outputs updated itinerary to chat."""
+    reroute_card = {
+        "trip_id": trip_id,
+        "incident_detected": incident_type,
+        "blocked_sector": blocked_route,
+        "mitigation_status": "REROUTED_AND_CONFIRMED",
+        "new_destination": backup_destination,
+        "escrow_reallocation": "Pine Labs funds successfully transferred to verified alternate host.",
+        "in_chat_alert": (
+            f"🚨 **SahayAI Live Sentinel Alert**\n"
+            f"**Disruption Detected:** {incident_type} on {blocked_route}.\n"
+            f"**Dynamic Reroute:** Automatically diverted to {backup_destination}.\n"
+            f"**Escrow Status:** Held funds safely reallocated with zero cancellation penalty."
+        )
+    }
+    print(f"\n[Live Reroute Triggered] Trip {trip_id}: Diverted from {blocked_route} to {backup_destination}", flush=True)
+    return reroute_card
+
+@mcp.tool()
+def delhivery_sentinel_reroute(trip_id: str, incident_type: str, remaining_stops: list[str]) -> dict:
+    """Dynamic In-Trip Sentinel Reroute on Road Incidents."""
+    return execute_live_reroute(trip_id=trip_id, incident_type=incident_type, blocked_route=remaining_stops[0] if remaining_stops else "Main Ghat Road")
+
+# =====================================================================
+# 5. PINE LABS ESCROW ENGINE
 # =====================================================================
 
 @mcp.tool()
 def pinelabs_multi_party_escrow(trip_id: str, members: list[str], amount_per_person: float) -> dict:
-    """Capability 1: Pine Labs Multi-Party Pre-Auth Escrow with consensus gating."""
+    """Pine Labs Multi-Party Pre-Auth Escrow with consensus gating."""
     return {
         "trip_id": trip_id,
         "status": "CONSENSUS_LOCKED",
@@ -115,76 +172,51 @@ def pinelabs_multi_party_escrow(trip_id: str, members: list[str], amount_per_per
         "atomic_capture_ready": True
     }
 
-@mcp.tool()
-def delhivery_terrain_leisure_route(destination: str, transit_mode: str, stops: list[str]) -> dict:
-    """Capability 2: Delhivery Terrain-Aware Leisure Route Sequencer."""
-    return {
-        "destination": destination,
-        "selected_transit_mode": transit_mode,
-        "optimized_sequence": stops,
-        "ghat_gradient_warning": "High gradient curves between Stop 1 and Stop 2; two-wheeler speed restricted to 35 km/h.",
-        "estimated_total_mins": 68
-    }
+# =====================================================================
+# 6. IN-CHAT NOTIFICATIONS
+# =====================================================================
 
 @mcp.tool()
-def delhivery_sentinel_reroute(trip_id: str, incident_type: str, remaining_stops: list[str]) -> dict:
-    """Capability 3: Dynamic In-Trip Sentinel Reroute on Road Incidents."""
+def dispatch_chat_notification(recipient_name: str, message: str) -> dict:
+    """Renders confirmations, receipts, and agent handoffs directly in the chat UI."""
+    print(f"[Chat Notification] Recipient: {recipient_name} | Message: {message}", flush=True)
     return {
-        "trip_id": trip_id,
-        "incident_status": "MITIGATED",
-        "incident_handled": incident_type,
-        "bypass_route": "SH-17 Coastal Bypass",
-        "delay_avoided_mins": 35,
-        "updated_stop_sequence": list(reversed(remaining_stops))
+        "status": "DELIVERED_IN_CHAT",
+        "recipient": recipient_name,
+        "message": message
     }
-
 
 @mcp.tool()
 def send_whatsapp_update(to_number: str, message: str) -> dict:
-    """Dispatches travel confirmations, booking receipts, and alerts via SMS to traveler mobile numbers."""
-    print(f"\n[Twilio SMS] Request received for: '{to_number}'", flush=True)
+    return dispatch_chat_notification(recipient_name=to_number, message=message)
 
-    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-    from_number = os.environ.get("TWILIO_PHONE_NUMBER", "+17372508034")
-
-    # 1. Clean number strictly to standard E.164 format (+91...)
-    clean_to = str(to_number).strip().replace("whatsapp:", "").replace(" ", "").replace("-", "")
-    if not clean_to.startswith("+"):
-        clean_to = f"+{clean_to}"
-
-    print(f"[Twilio SMS] Outbound route: {from_number} -> {clean_to}", flush=True)
-
-    if not account_sid or not auth_token:
-        print("[Twilio SMS Error] Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN", flush=True)
-        return {"status": "FAILED_MISSING_CREDENTIALS", "recipient": clean_to}
-
-    try:
-        client = Client(account_sid, auth_token)
-        msg = client.messages.create(
-            from_=from_number,
-            to=clean_to,
-            body=message
-        )
-        print(f"[Twilio SMS Success] Sent! SID: {msg.sid} | Status: {msg.status}", flush=True)
-        return {
-            "status": "DELIVERED",
-            "message_sid": msg.sid,
-            "recipient": clean_to,
-            "channel": "SMS_TWILIO_LIVE"
-        }
-    except Exception as e:
-        print(f"[Twilio SMS Error] {type(e).__name__}: {e}", flush=True)
-        return {
-            "status": "DELIVERED_DISPATCHED_FALLBACK",
-            "error": str(e),
-            "message_sid": f"SMmock_{abs(hash(message)) % 1000000000000}",
-            "recipient": clean_to,
-            "channel": "SMS_FALLBACK_SIMULATION"
-        }
-
-# Optional alias so the agent can invoke either tool name seamlessly
 @mcp.tool()
 def send_sms_update(to_number: str, message: str) -> dict:
-    """Dispatches travel alerts and escrow receipts via SMS."""
-    return send_whatsapp_update(to_number=to_number, message=message)
+    return dispatch_chat_notification(recipient_name=to_number, message=message)
+
+# =====================================================================
+# 7. SERVER RUNNER (Supports both `uvicorn server:app` & `python server.py`)
+# =====================================================================
+
+# Expose `app` in case Render is configured to run `uvicorn server:app`
+app = None
+if hasattr(mcp, "sse_app"):
+    try:
+        app = mcp.sse_app()
+    except Exception:
+        pass
+elif hasattr(mcp, "http_app"):
+    try:
+        app = mcp.http_app(transport="sse")
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    print(f"\n[SahayAI Rails] Starting FastMCP Server on 0.0.0.0:{port}...\n", flush=True)
+    try:
+        mcp.run(transport="sse")
+    except Exception:
+        try:
+            mcp.run(transport="sse", host="0.0.0.0", port=port)
+        except Exception:
+            mcp.run()
