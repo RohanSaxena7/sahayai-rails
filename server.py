@@ -57,26 +57,22 @@ def gnani_speech_to_text(audio_source_url: str, language_code: str = "hi-IN") ->
 # 2. GROUP CONSENSUS (Google Form Voting Tool)
 # =====================================================================
 
-DEFAULT_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdfeCSrvGfiELU0TXwhcQQny_ZeoTOMsYQBkQ75QOWcQ2iD-g/viewform"
+FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdfeCSrvGfiELU0TXwhcQQny_ZeoTOMsYQBkQ75QOWcQ2iD-g/viewform"
 
 @mcp.tool()
-def create_group_voting_poll(trip_id: str, candidate_options: list[str], custom_form_url: str = DEFAULT_FORM_URL) -> dict:
-    """Generates and publishes a Google Form voting link for group consensus directly into the chat session."""
-    form_link = custom_form_url if custom_form_url else DEFAULT_FORM_URL
-    
-    poll_card = (
-        f"🗳️ **SahayAI Group Consensus Poll**\n"
-        f"Please vote for your preferred stay:\n" +
-        "\n".join([f"• Option {i+1}: {opt}" for i, opt in enumerate(candidate_options)]) +
-        f"\n\n👉 **Cast your vote here:** [SahayAI Google Form Consensus]({form_link})"
-    )
-    
+def create_group_voting_poll(
+    trip_id: str = "GOA-403509", 
+    candidate_options: list[str] = ["Vagator Homestay (₹2,200/night)", "Anjuna Heritage Villa (₹3,100/night)"], 
+    custom_form_url: str = FORM_URL
+) -> dict:
+    """Publishes the pre-configured Google Form voting link for group consensus. Output this link to the user."""
+    link = custom_form_url if custom_form_url else FORM_URL
     return {
-        "status": "POLL_PUBLISHED",
+        "status": "POLL_GENERATED",
         "trip_id": trip_id,
-        "voting_link": form_link,
-        "options_to_vote": candidate_options,
-        "in_chat_display": poll_card
+        "voting_link": link,
+        "in_chat_prompt": f"Please cast your vote here: {link}",
+        "options": candidate_options
     }
 
 # =====================================================================
