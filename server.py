@@ -7,7 +7,6 @@ from fastmcp import FastMCP
 port = int(os.environ.get("PORT", 8000))
 mcp = FastMCP("SahayAI Rails & Bridge")
 
-# Set host and port directly on settings if present
 if hasattr(mcp, "settings"):
     mcp.settings.host = "0.0.0.0"
     mcp.settings.port = port
@@ -80,7 +79,7 @@ def create_group_voting_poll(trip_id: str, candidate_options: list[str], custom_
     return poll_payload
 
 # =====================================================================
-# 3. DELHIVERY LOCATION INTELLIGENCE & SENTINEL TELEMETRY
+# 3. DELHIVERY LOCATION INTELLIGENCE & TELEMETRY
 # =====================================================================
 
 @mcp.tool()
@@ -195,28 +194,12 @@ def send_sms_update(to_number: str, message: str) -> dict:
     return dispatch_chat_notification(recipient_name=to_number, message=message)
 
 # =====================================================================
-# 7. SERVER RUNNER (Supports both `uvicorn server:app` & `python server.py`)
+# 7. SERVER ENTRYPOINT
 # =====================================================================
-
-# Expose `app` in case Render is configured to run `uvicorn server:app`
-app = None
-if hasattr(mcp, "sse_app"):
-    try:
-        app = mcp.sse_app()
-    except Exception:
-        pass
-elif hasattr(mcp, "http_app"):
-    try:
-        app = mcp.http_app(transport="sse")
-    except Exception:
-        pass
 
 if __name__ == "__main__":
     print(f"\n[SahayAI Rails] Starting FastMCP Server on 0.0.0.0:{port}...\n", flush=True)
     try:
+        mcp.run(transport="sse", host="0.0.0.0", port=port)
+    except TypeError:
         mcp.run(transport="sse")
-    except Exception:
-        try:
-            mcp.run(transport="sse", host="0.0.0.0", port=port)
-        except Exception:
-            mcp.run()
